@@ -1,0 +1,14 @@
+0. 가상환경 생성
+conda create -n <가상환경명> python=3.10.16
+
+1. 가상환경 활성화
+conda activate <가상환경명>
+
+2. requirements.txt 파일이 있는 디렉터리로 이동
+cd D:\github\supervised_team_project\script
+
+3. requirements.txt 파일 설치
+conda env update -f conda_requirements.yaml
+
+만약 conda에서 제공되지 않는 패키지가 있다면, pip로 설치할 수 있습니다. 
+아나콘다 환경 내에서 pip도 사용할 수 있기 때문에, pip install -r requirements.txt 명령어를 그대로 사용할 수 있습니다.
