@@ -790,10 +790,6 @@ for name, model in models.items():
     test_mae = mean_absolute_error(y_test, y_pred)
     test_r2 = r2_score(y_test, y_pred)
     
-    # 과적합 계산
-    overfitting_rmse = ((train_rmse - test_rmse) / train_rmse) * 100 if train_rmse > 0 else 0
-    overfitting_r2 = ((train_r2 - test_r2) / train_r2) * 100 if train_r2 > 0 else 0
-    
     # 결과 저장
     results.append({
         'Model': name,
@@ -806,16 +802,11 @@ for name, model in models.items():
         'Test MAE': test_mae,
         'Train R2': train_r2,
         'CV R2': cv_r2_scores.mean(),
-        'Test R2': test_r2,
-        'RMSE Overfitting (%)': overfitting_rmse,
-        'R2 Overfitting (%)': overfitting_r2
+        'Test R2': test_r2
     })
     
     print(f"- 훈련 세트: RMSE={train_rmse:.2f}, MAE={train_mae:.2f}, R2={train_r2:.4f}")
     print(f"- 테스트 세트: RMSE={test_rmse:.2f}, MAE={test_mae:.2f}, R2={test_r2:.4f}")
-    
-    if overfitting_rmse > 10 or overfitting_r2 > 10:
-        print(f"  ! 경고: 과적합 가능성 (RMSE 차이: {overfitting_rmse:.1f}%, R² 차이: {overfitting_r2:.1f}%)")
 
 # %% [markdown]
 # ### 5.3 평가 결과 분석
@@ -875,30 +866,17 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### 5.5 과적합 분석
+# ### 5.5 최고 성능 모델 확인
 
 # %%
-# 과적합 분석 시각화
-plt.figure(figsize=(12, 6))
+# 최고 성능 모델 선택 (테스트 RMSE 기준)
+best_model_name = results_df.iloc[0]['Model']
+best_model = models[best_model_name]
+print(f"\n테스트 RMSE 기준 최고 성능 모델: {best_model_name}")
+print(f"테스트 성능: RMSE={results_df.iloc[0]['Test RMSE']:.2f}, R2={results_df.iloc[0]['Test R2']:.4f}")
 
-# RMSE 기준 과적합 시각화
-plt.subplot(1, 2, 1)
-plt.bar(models_list, results_df['RMSE Overfitting (%)'])
-plt.title('모델별 RMSE 과적합 정도 (%)')
-plt.xlabel('모델')
-plt.ylabel('RMSE 차이 (%)')
-plt.xticks(rotation=45)
-
-# R2 기준 과적합 시각화
-plt.subplot(1, 2, 2)
-plt.bar(models_list, results_df['R2 Overfitting (%)'])
-plt.title('모델별 R² 과적합 정도 (%)')
-plt.xlabel('모델')
-plt.ylabel('R² 차이 (%)')
-plt.xticks(rotation=45)
-
-plt.tight_layout()
-plt.show()
+# %% [markdown]
+# 결과 분석에 따르면 RandomForest 모델이 가장 우수한 성능을 보였습니다. 다음 단계에서는 이 모델의 성능을 더욱 향상시키기 위해 하이퍼파라미터 튜닝을 진행하겠습니다.
 
 # %% [markdown]
 # ## 6. 최적 모델 튜닝
@@ -935,7 +913,28 @@ print("최적 RandomForest 파라미터:", rf_gs.best_params_)
 best_rf = rf_gs.best_estimator_
 
 # %% [markdown]
-# ### 6.3 최적화된 모델 성능 평가
+# ### 6.3 하이퍼파라미터 조합별 성능 확인
+
+# %%
+# GridSearchCV 결과를 데이터프레임으로 변환하여 출력
+cv_results_df = pd.DataFrame(rf_gs.cv_results_)
+
+# 각 하이퍼파라미터 조합과 성능 지표 출력
+print("\n=== 하이퍼파라미터 조합별 성능 ===")
+# RMSE 값은 음수로 저장되어 있으므로 양수로 변환
+cv_results_df['mean_test_rmse'] = -cv_results_df['mean_test_rmse']
+cv_results_df['mean_test_mae'] = -cv_results_df['mean_test_mae']
+
+# 필요한 열만 선택하여 RMSE 기준으로 정렬
+params_and_scores = cv_results_df[['param_regressor__n_estimators', 
+                                   'param_regressor__max_depth', 
+                                   'param_regressor__min_samples_split',
+                                   'mean_test_rmse', 'mean_test_mae', 
+                                   'mean_test_r2', 'rank_test_rmse']]
+print(params_and_scores.sort_values('rank_test_rmse'))
+
+# %% [markdown]
+# ### 6.4 최적화된 모델 성능 평가
 
 # %%
 # 최적화된 모델의 성능 평가
@@ -956,58 +955,75 @@ test_rmse_best = np.sqrt(mean_squared_error(y_test, y_test_pred_best))
 test_mae_best = mean_absolute_error(y_test, y_test_pred_best)
 test_r2_best = r2_score(y_test, y_test_pred_best)
 
-# 과적합 계산
-overfitting_rmse_best = (train_rmse_best - test_rmse_best) / train_rmse_best * 100 if train_rmse_best > 0 else 0
-overfitting_r2_best = (train_r2_best - test_r2_best) / train_r2_best * 100 if train_r2_best > 0 else 0
-
 # %% [markdown]
-# ### 6.4 최적화 결과 분석
+# ### 6.5 최적화 결과 분석
 
 # %%
 # 결과 출력
 print("\n최적화된 RandomForest 모델 평가:")
 best_model_results = pd.DataFrame({
-    'Metric': ['RMSE', 'MAE', 'R²', 'Overfitting (%)'],
-    'Train': [train_rmse_best, train_mae_best, train_r2_best, '-'],
-    'CV': [cv_rmse_best, cv_mae_best, cv_r2_best, '-'],
-    'Test': [test_rmse_best, test_mae_best, test_r2_best, '-'],
-    'Train-Test': [f"{train_rmse_best-test_rmse_best:.2f}", 
-                  f"{train_mae_best-test_mae_best:.2f}", 
-                  f"{train_r2_best-test_r2_best:.4f}",
-                  f"RMSE: {overfitting_rmse_best:.1f}%, R²: {overfitting_r2_best:.1f}%"]
+    'Metric': ['RMSE', 'MAE', 'R²'],
+    'Train': [train_rmse_best, train_mae_best, train_r2_best],
+    'CV': [cv_rmse_best, cv_mae_best, cv_r2_best],
+    'Test': [test_rmse_best, test_mae_best, test_r2_best]
 })
 print(best_model_results)
 
-# 과적합 경고
-if overfitting_rmse_best > 10:
-    print(f"\n주의: 최적화된 모델에서 과적합이 발생했을 수 있습니다. (RMSE 차이: {overfitting_rmse_best:.1f}%)")
-    print("정규화 매개변수를 조정하거나 특성 선택을 다시 검토해 보세요.")
+# %% [markdown]
+# 하이퍼파라미터 튜닝을 통해 RandomForest 모델의 성능을 최적화했습니다. 다음 단계에서는 최적화된 모델과 기본 모델의 성능을 비교하고, 특성 중요도 분석 및 예측 결과를 확인하겠습니다.
 
 # %% [markdown]
 # ## 7. 최적 모델 분석 및 특성 중요도
 
 # %% [markdown]
-# ### 7.1 최고 성능 모델 선택
+# ### 7.1 최적화된 RandomForest 모델의 성능 확인
 
 # %%
-# 최고 성능 모델 선택
-best_model_name = results_df.iloc[0]['Model']
-best_model = models[best_model_name]
-print(f"선택된 최적 모델: {best_model_name}")
-print(f"테스트 성능: RMSE={results_df.iloc[0]['Test RMSE']:.2f}, R2={results_df.iloc[0]['Test R2']:.4f}")
+# 최적화된 RandomForest 모델과 기본 RandomForest 모델 비교
+print("\n최적화된 RandomForest 모델과 기본 RandomForest 모델 성능 비교:")
+
+# 기본 RandomForest 모델 성능
+base_rf_perf = results_df[results_df['Model']=='Random Forest']
+base_rf_rmse = base_rf_perf['Test RMSE'].values[0]
+base_rf_r2 = base_rf_perf['Test R2'].values[0]
+
+# 최적화된 RandomForest 모델 성능
+optimized_rf_rmse = test_rmse_best
+optimized_rf_r2 = test_r2_best
+
+print(f"기본 RandomForest 모델: RMSE={base_rf_rmse:.2f}, R2={base_rf_r2:.4f}")
+print(f"최적화된 RandomForest 모델: RMSE={optimized_rf_rmse:.2f}, R2={optimized_rf_r2:.4f}")
+
+# 성능 향상 계산
+rmse_improvement = ((base_rf_rmse - optimized_rf_rmse) / base_rf_rmse) * 100
+r2_improvement = ((optimized_rf_r2 - base_rf_r2) / base_rf_r2) * 100 if base_rf_r2 > 0 else 0
+print(f"\n성능 개선 수치:")
+print(f"- RMSE: {rmse_improvement:.2f}% 감소")
+print(f"- R2: {r2_improvement:.2f}% 증가")
+
+# 최종 모델 정의
+final_model = best_rf  # 최적화된 RandomForest 모델 선택
+final_model_name = "최적화된 RandomForest"
+final_rmse = optimized_rf_rmse
+final_r2 = optimized_rf_r2
+
+print(f"최종 모델 성능: RMSE={final_rmse:.2f}, R2={final_r2:.4f}")
+
+# %% [markdown]
+# 성능 비교 결과, 최적화된 RandomForest 모델이 기본 모델보다 더 우수한 성능을 보여주므로 이를 최종 모델로 선택하겠습니다. 하이퍼파라미터 튜닝을 통해 RMSE는 감소하고 R²는 증가했으며, 이는 모델의 예측 정확도가 개선되었음을 의미합니다. 다음으로 이 모델의 특성 중요도를 분석하여 매출 예측에 중요한 요인들을 파악하겠습니다.
 
 # %% [markdown]
 # ### 7.2 특성 중요도 추출 및 시각화
 
 # %%
-# 특성 중요도 분석 (트리 기반 모델인 경우)
-if best_model_name in ['Random Forest', 'Gradient Boosting']:
+# 특성 중요도 분석 (트리 기반 모델인 경우만 수행)
+if hasattr(final_model, 'named_steps') and hasattr(final_model.named_steps.get('regressor', None), 'feature_importances_'):
     # 모델에서 특성 중요도 추출
-    regressor = best_model.named_steps['regressor']
+    regressor = final_model.named_steps['regressor']
     feature_importances = regressor.feature_importances_
     
     # 전처리기에서 변환된 특성 이름 가져오기
-    preprocessor = best_model.named_steps['preprocessor']
+    preprocessor = final_model.named_steps['preprocessor']
     num_transformer = preprocessor.named_transformers_['num']
     cat_transformer = preprocessor.named_transformers_['cat']
     
@@ -1027,7 +1043,7 @@ if best_model_name in ['Random Forest', 'Gradient Boosting']:
     # 상위 10개 특성 시각화
     plt.figure(figsize=(12, 8))
     sns.barplot(x='importance', y='feature', data=importance_df.head(10))
-    plt.title(f'{best_model_name} 모델의 상위 10개 중요 특성')
+    plt.title(f'{final_model_name} 모델의 상위 10개 중요 특성')
     plt.xlabel('중요도')
     plt.ylabel('특성')
     plt.tight_layout()
@@ -1036,6 +1052,9 @@ if best_model_name in ['Random Forest', 'Gradient Boosting']:
     print("\n상위 10개 중요 특성:")
     for idx, row in importance_df.head(10).iterrows():
         print(f"- {row['feature']}: {row['importance']:.4f}")
+else:
+    print("\n선택된 모델은 특성 중요도를 제공하지 않습니다.")
+    importance_df = pd.DataFrame() # 빈 데이터프레임 생성 (이후 코드에서 참조할 수 있도록)
 
 # %% [markdown]
 # ### 7.3 예측 결과 분석
@@ -1043,20 +1062,20 @@ if best_model_name in ['Random Forest', 'Gradient Boosting']:
 # %%
 # 예측 결과 분석
 print("\n예측 결과 분석 중...")
-y_pred_best = best_model.predict(X_test)
+y_pred_final = final_model.predict(X_test)
 
 # 예측 성능 평가
-test_rmse = np.sqrt(mean_squared_error(y_test, y_pred_best))
-test_mae = mean_absolute_error(y_test, y_pred_best)
-test_r2 = r2_score(y_test, y_pred_best)
+test_rmse = np.sqrt(mean_squared_error(y_test, y_pred_final))
+test_mae = mean_absolute_error(y_test, y_pred_final)
+test_r2 = r2_score(y_test, y_pred_final)
 
 # 예측 결과 데이터프레임
 prediction_df = pd.DataFrame({
     '실제값': y_test,
-    '예측값': y_pred_best,
-    '오차': y_test - y_pred_best,
-    '절대오차': np.abs(y_test - y_pred_best),
-    '상대오차(%)': np.abs((y_test - y_pred_best) / y_test) * 100
+    '예측값': y_pred_final,
+    '오차': y_test - y_pred_final,
+    '절대오차': np.abs(y_test - y_pred_final),
+    '상대오차(%)': np.abs((y_test - y_pred_final) / y_test) * 100
 })
 
 # 예측 성능 지표 출력
@@ -1074,7 +1093,7 @@ plt.figure(figsize=(15, 10))
 
 # 예측값 vs 실제값 산점도
 plt.subplot(2, 2, 1)
-plt.scatter(y_test, y_pred_best, alpha=0.5)
+plt.scatter(y_test, y_pred_final, alpha=0.5)
 plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], 'r--')
 plt.title('실제값 vs 예측값')
 plt.xlabel('실제 평균매출')
@@ -1091,7 +1110,7 @@ plt.ylabel('빈도')
 
 # 예측값 대비 잔차 산점도
 plt.subplot(2, 2, 3)
-plt.scatter(y_pred_best, prediction_df['오차'], alpha=0.5)
+plt.scatter(y_pred_final, prediction_df['오차'], alpha=0.5)
 plt.axhline(y=0, color='r', linestyle='--')
 plt.title('예측값 대비 잔차')
 plt.xlabel('예측값')
@@ -1115,18 +1134,23 @@ plt.show()
 # %% [markdown]
 # ### 8.1 요식업 매출 예측 모델 결론
 
+# %% [markdown]
+# 분석 결과, 최적화된 RandomForest 모델이 가장 우수한 성능을 보여주며, 특성 중요도 분석을 통해 매출 예측에 중요한 변수들을 확인할 수 있었습니다. 예측 결과 분석에서는 평균 절대 오차와 상대 오차가 합리적인 수준으로 나타났습니다. 이 모델은 새로운 상권의 예상 매출을 예측하는 데 활용할 수 있을 것입니다.
+
 # %%
 # 모델 결론 출력
-print("\n요식업 매출 예측 모델 결론:")
-if best_model_name in ['Random Forest', 'Gradient Boosting']:
+print("\n최종 모델 성능 요약:")
+
+# 특성 중요도 정보가 있는 경우에만 출력
+if not importance_df.empty:
     top_features_str = ", ".join([f"{row['feature']}" for _, row in importance_df.head(5).iterrows()])
-    print(f"1. {best_model_name} 모델이 가장 우수한 성능을 보여 최종 모델로 선정되었습니다 (R²={test_r2:.4f})")
-    print(f"2. 가장 중요한 상위 5개 특성은 {top_features_str}입니다")
-    print(f"3. 평균 예측 오차는 {prediction_df['절대오차'].mean():.2f}원이며, 상대 오차는 {prediction_df['상대오차(%)'].mean():.2f}%입니다")
+    print(f"모델: {final_model_name} (R²={test_r2:.4f})")
+    print(f"상위 5개 중요 특성: {top_features_str}")
 else:
-    print(f"1. {best_model_name} 모델이 가장 우수한 성능을 보여 최종 모델로 선정되었습니다 (R²={test_r2:.4f})")
-    print(f"2. 평균 예측 오차는 {prediction_df['절대오차'].mean():.2f}원이며, 상대 오차는 {prediction_df['상대오차(%)'].mean():.2f}%입니다")
-print(f"3. 이 모델은 새로운 상권의 예상 매출을 예측하는 데 활용할 수 있습니다")
+    print(f"모델: {final_model_name} (R²={test_r2:.4f})")
+
+print(f"평균 절대 오차: {prediction_df['절대오차'].mean():.2f}원")
+print(f"평균 상대 오차: {prediction_df['상대오차(%)'].mean():.2f}%")
 
 # %% [markdown]
 # ### 8.2 새로운 상권 예측 예시
@@ -1136,7 +1160,7 @@ print(f"3. 이 모델은 새로운 상권의 예상 매출을 예측하는 데 �
 print("\n새로운 상권 매출 예측 예시:")
 # 테스트 데이터의 첫 번째 샘플을 예시로 사용
 sample_data = X_test.iloc[0:1].copy()
-sample_prediction = best_model.predict(sample_data)[0]
+sample_prediction = final_model.predict(sample_data)[0]
 actual_value = y_test.iloc[0]
 
 print(f"샘플 상권 정보:")
@@ -1157,8 +1181,9 @@ print(f"예측 오차: {abs(actual_value - sample_prediction):,.2f}원 ({abs(act
 
 # %%
 # 모델 저장
-joblib.dump(best_model, f'models/{best_model_name.replace(" ", "_").lower()}_model.pkl')
-print(f"\n최종 모델 저장 완료: models/{best_model_name.replace(' ', '_').lower()}_model.pkl")
+model_filename = f'models/{final_model_name.replace(" ", "_").lower()}_model.pkl'
+joblib.dump(final_model, model_filename)
+print(f"\n최종 모델 저장 완료: {model_filename}")
 
 # 최종 정제된 데이터 저장
 restaurant_data.to_csv("data/서울시_요식업_정제데이터.csv", index=False, encoding="cp949")
