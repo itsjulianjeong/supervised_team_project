@@ -28,7 +28,7 @@
 ## 🔧 사용 기술
 
 - **언어/환경**: Python, JupyterLab  
-- **EDA 및 시각화**: pandas, numpy, seaborn, matplotlib  
+- **EDA**: pandas, numpy, seaborn, matplotlib  
 - **모델링**: sklearn (Linear, Ridge, Lasso, RandomForest, Gradient Boosting)  
 - **형상 관리**: GitHub  
 - **협업 툴**: Google Drive, Zoom, Discord  
